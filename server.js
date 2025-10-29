@@ -14,16 +14,12 @@ const adminBlogRoutes = require('./routes/adminBlogRoutes');
 const researchRoutes = require('./routes/researchRoutes');
 const contactRoutes = require('./routes/contactRoutes');
 const kycRoutes = require('./routes/kycRoutes');
-// app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
-const adminStats = require("./routes/adminStats");
-const videoRoutes = require("./routes/videoRoutes");
-
+const adminStats = require('./routes/adminStats');
+const videoRoutes = require('./routes/videoRoutes');
+const fs = require('fs');
 
 const app = express();
 const PORT = process.env.PORT || 5001;
-
-const fs = require('fs');
-
 
 // ensure uploads directory exists
 const UPLOADS_DIR = path.join(__dirname, 'uploads');
@@ -32,50 +28,25 @@ if (!fs.existsSync(UPLOADS_DIR)) {
   console.log('Created uploads directory at', UPLOADS_DIR);
 }
 
-
+// allowed origins - update these to match your frontend
 const allowedOrigins = [
-  "https://investedgesolution.com",      // your production frontend domain
-  "https://www.investedgesolution.com",  // if you use www
-  "http://localhost:5173",               // local dev Vite default (optional)
-  "http://localhost:3000"                // local CRA dev (optional)
+  "https://investedgesolution.com",
+  "https://www.investedgesolution.com",
+  "http://localhost:5173",
+  "http://localhost:3000"
 ];
 
-app.use(cors({
-  origin: (origin, callback) => {
-    // allow requests with no origin (like server-to-server or curl)
-    if (!origin) return callback(null, true);
-    if (allowedOrigins.indexOf(origin) !== -1) {
-      return callback(null, true);
-    }
-    return callback(new Error("CORS policy: This origin is not allowed: " + origin));
-  },
-  credentials: true, // if you use cookies or auth headers
-  methods: ["GET","POST","PUT","PATCH","DELETE","OPTIONS"],
-  allowedHeaders: ["Content-Type","Authorization","Accept","X-Requested-With"]
-}));
-
-// Make sure preflight OPTIONS are handled
-app.options("/*", cors());
-
-
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-
-
-
-
-// --- CORS: safe, manual preflight handler (works with any path-to-regexp version) ---
+// --- Manual CORS + preflight handler (robust for Render) ---
 app.use((req, res, next) => {
   const origin = req.headers.origin;
   if (!origin) {
-    // allow server-to-server requests or curl with no origin
+    // allow server-to-server or curl requests
     res.header('Access-Control-Allow-Origin', '*');
   } else if (allowedOrigins.includes(origin)) {
     res.header('Access-Control-Allow-Origin', origin);
     res.header('Vary', 'Origin');
   } else {
-    // if you want, uncomment to block unknown origins:
-    // return res.status(403).send('CORS policy: This origin is not allowed');
+    // block unknown origins but still respond (optional)
     res.header('Access-Control-Allow-Origin', 'null');
   }
 
@@ -83,13 +54,22 @@ app.use((req, res, next) => {
   res.header('Access-Control-Allow-Headers', 'Content-Type,Authorization,Accept,X-Requested-With');
   res.header('Access-Control-Allow-Credentials', 'true');
 
-  // handle preflight
   if (req.method === 'OPTIONS') {
     return res.sendStatus(204);
   }
   next();
 });
 
+// body parsers
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+// simple root route (choose one behavior)
+// Option 1: API-only message
+app.get('/', (req, res) => res.send('API is running. Use /api endpoints.'));
+
+// // Option 2: redirect to frontend (uncomment if you want redirect)
+// // app.get('/', (req, res) => res.redirect('https://investedgesolution.com'));
 
 // static uploads
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
@@ -105,17 +85,16 @@ app.use('/api/admin', adminBlogRoutes);
 app.use('/api', researchRoutes);
 app.use('/api', contactRoutes);
 app.use('/api', kycRoutes);
-app.use("/api", adminStats);  
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
-app.use("/api/videos", videoRoutes);
+app.use('/api', adminStats);
+app.use('/api/videos', videoRoutes);
 
 // health
 app.get('/api/health', (req, res) => res.json({ ok: true }));
 
+// error handler (keep at bottom)
 app.use(errorHandler);
 
 connectDB(process.env.MONGO_URI).then(() => {
-  // graceful port check to avoid EADDRINUSE crash
   const server = app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
   });
@@ -127,4 +106,7 @@ connectDB(process.env.MONGO_URI).then(() => {
       console.error(err);
     }
   });
+}).catch(err => {
+  console.error('Failed to connect DB or start server:', err);
+  process.exit(1);
 });
