@@ -7,15 +7,31 @@ const Research = require('../models/Research');
 const Submission = require('../models/ResearchSubmission');
 const Otp = require('../models/Otp');
 const auth = require('../middleware/auth'); // admin auth for admin endpoints
-const nodemailer = require("nodemailer");
+// replace nodemailer with sendgrid
+const sgMail = require('@sendgrid/mail');
+sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 
-const transporter = nodemailer.createTransport({
-    service: "gmail",
-    auth: {
-      user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASS,
-    },
-  });
+// helper to send OTP email via SendGrid
+async function sendOtpEmail(toEmail, code) {
+  const msg = {
+    to: toEmail,
+    from: process.env.SMTP_FROM || 'noreply@investedgesolution.com',
+    subject: 'Your OTP Code',
+    html: `
+      <div style="font-family:Arial,sans-serif;padding:20px;background:#f8f8f8;">
+        <h2 style="color:#333;">Your OTP Code</h2>
+        <p style="font-size:16px;">Your one-time password (OTP) is:</p>
+        <div style="font-size:28px;font-weight:bold;background:#e0ffe0;padding:10px;text-align:center;border-radius:8px;color:#2b6d2b;">
+          ${code}
+        </div>
+        <p style="margin-top:10px;">This OTP will expire in 5 minutes.</p>
+      </div>
+    `,
+  };
+
+  return sgMail.send(msg);
+}
+
   
 const router = express.Router();
 
@@ -130,9 +146,10 @@ router.post("/research/send-otp", async (req, res, next) => {
         `,
       };
   
-      await transporter.sendMail(mailOptions);
-      console.log(`✅ OTP sent to ${email}: ${code}`);
-      res.json({ message: "OTP sent to your email" });
+      await sendOtpEmail(email, code);
+console.log(`✅ OTP sent to ${email}: ${code}`);
+res.json({ message: "OTP sent to your email" });
+
     } catch (err) {
       console.error("send-otp error:", err);
       next(err);
