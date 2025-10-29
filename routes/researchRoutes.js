@@ -117,44 +117,47 @@ router.delete('/admin/research/:id', auth, async (req, res, next) => {
 // --- START replace OTP & submit handlers (email-only) ---
 
 // PUBLIC: send OTP to email (email required)
+// PUBLIC: send OTP to email (email required)
 router.post("/research/send-otp", async (req, res, next) => {
-    try {
-      const { email } = req.body;
-      if (!email) return res.status(400).json({ message: "email required" });
-  
-      // generate 6-digit otp
-      const code = String(Math.floor(100000 + Math.random() * 900000));
-      const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
-  
-      // store in DB (contact=email, type=email)
-      await Otp.create({ contact: email, type: "email", code, expiresAt, verified: false });
-  
-      // send email via nodemailer transporter (assumes transporter configured)
-      const mailOptions = {
-        from: `"Investedge" <${process.env.SMTP_USER}>`,
-        to: email,
-        subject: "Your OTP Code",
-        html: `
-          <div style="font-family:Arial,sans-serif;padding:20px;background:#f8f8f8;">
-            <h2 style="color:#333;">Your OTP Code</h2>
-            <p style="font-size:16px;">Your one-time password (OTP) is:</p>
-            <div style="font-size:28px;font-weight:bold;background:#e0ffe0;padding:10px;text-align:center;border-radius:8px;color:#2b6d2b;">
-              ${code}
-            </div>
-            <p style="margin-top:10px;">This OTP will expire in 5 minutes.</p>
-          </div>
-        `,
-      };
-  
-      await sendOtpEmail(email, code);
-console.log(`✅ OTP sent to ${email}: ${code}`);
-res.json({ message: "OTP sent to your email" });
+  try {
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ message: "email required" });
 
-    } catch (err) {
-      console.error("send-otp error:", err);
-      next(err);
+    // quick env guard
+    if (!process.env.SENDGRID_API_KEY) {
+      console.error("SendGrid API key missing in env");
+      return res.status(500).json({ message: "Email service not configured" });
     }
-  });
+    if (!process.env.SMTP_FROM) {
+      console.error("SMTP_FROM missing in env");
+      return res.status(500).json({ message: "Email sender not configured" });
+    }
+
+    // generate 6-digit otp
+    const code = String(Math.floor(100000 + Math.random() * 900000));
+    const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
+
+    // store in DB (contact=email, type=email)
+    await Otp.create({ contact: email, type: "email", code, expiresAt, verified: false });
+
+    // send email via SendGrid helper
+    try {
+      await sendOtpEmail(email, code);
+      console.log(`✅ OTP sent to ${email}: ${code}`);
+      return res.json({ message: "OTP sent to your email" });
+    } catch (sendErr) {
+      // log helpful SendGrid response body when available
+      console.error("send-otp sendgrid error:", sendErr);
+      console.error("send-otp sendgrid response body:", sendErr?.response?.body || sendErr?.message || sendErr);
+      return res.status(502).json({ message: "Failed to send OTP email" });
+    }
+
+  } catch (err) {
+    console.error("send-otp error:", err);
+    return next(err);
+  }
+});
+
   
   // PUBLIC: verify OTP (email)
   router.post("/research/verify-otp", async (req, res, next) => {
