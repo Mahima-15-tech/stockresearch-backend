@@ -33,9 +33,42 @@ if (!fs.existsSync(UPLOADS_DIR)) {
 }
 
 
-app.use(cors());
+const allowedOrigins = [
+  "https://investedgesolution.com",      // your production frontend domain
+  "https://www.investedgesolution.com",  // if you use www
+  "http://localhost:5173",               // local dev Vite default (optional)
+  "http://localhost:3000"                // local CRA dev (optional)
+];
+
+app.use(cors({
+  origin: (origin, callback) => {
+    // allow requests with no origin (like server-to-server or curl)
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.indexOf(origin) !== -1) {
+      return callback(null, true);
+    }
+    return callback(new Error("CORS policy: This origin is not allowed: " + origin));
+  },
+  credentials: true, // if you use cookies or auth headers
+  methods: ["GET","POST","PUT","PATCH","DELETE","OPTIONS"],
+  allowedHeaders: ["Content-Type","Authorization","Accept","X-Requested-With"]
+}));
+
+// Make sure preflight OPTIONS are handled
+app.options("*", cors());
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// simple root route
+app.get('/', (req, res) => {
+  res.send('API is running. Use /api endpoints.');
+});
+
+app.get('/', (req, res) => {
+  res.redirect('https://investedgesolution.com'); // tumhara frontend URL
+});
+
 
 // static uploads
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
