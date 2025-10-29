@@ -61,13 +61,33 @@ app.options("/*", cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// simple root route
-app.get('/', (req, res) => {
-  res.send('API is running. Use /api endpoints.');
-});
 
-app.get('/', (req, res) => {
-  res.redirect('https://investedgesolution.com'); // tumhara frontend URL
+
+
+// --- CORS: safe, manual preflight handler (works with any path-to-regexp version) ---
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  if (!origin) {
+    // allow server-to-server requests or curl with no origin
+    res.header('Access-Control-Allow-Origin', '*');
+  } else if (allowedOrigins.includes(origin)) {
+    res.header('Access-Control-Allow-Origin', origin);
+    res.header('Vary', 'Origin');
+  } else {
+    // if you want, uncomment to block unknown origins:
+    // return res.status(403).send('CORS policy: This origin is not allowed');
+    res.header('Access-Control-Allow-Origin', 'null');
+  }
+
+  res.header('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type,Authorization,Accept,X-Requested-With');
+  res.header('Access-Control-Allow-Credentials', 'true');
+
+  // handle preflight
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(204);
+  }
+  next();
 });
 
 
